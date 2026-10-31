@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: worker
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && npm --prefix web install --no-audit --no-fund && npm --prefix web run build
+    startCommand: python worker.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
