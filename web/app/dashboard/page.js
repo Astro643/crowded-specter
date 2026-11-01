@@ -12,7 +12,7 @@ export default function Dashboard() {
   const router = useRouter();
   const [s, setS] = useState(null);
   const [live, setLive] = useState(false);
-  const [mode, setModeState] = useState("auto");
+  const [mode, setModeState] = useState(null);   // null = show the Automatic/Manual picker
   const [toasts, setToasts] = useState([]);
   const [busy, setBusy] = useState("");
   const [ask, setAsk] = useState(false);
@@ -25,13 +25,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!store.token) { router.replace("/"); return; }
-    setModeState(store.mode);
+    try { setModeState(sessionStorage.getItem("wp") ? store.mode : null); } catch { setModeState(store.mode); }
     return stream(setS, setLive, () => signOut(false));
   }, [router, signOut]);
 
   useEffect(() => {
-    document.body.classList.toggle("panic", !!s?.panic);
-    return () => document.body.classList.remove("panic");
+    document.body.classList.toggle("armed", !!s?.panic);
+    return () => document.body.classList.remove("armed");
   }, [s?.panic]);
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export default function Dashboard() {
     if (ask && !d.open) d.showModal(); else if (!ask && d.open) d.close();
   }, [ask]);
 
-  const setMode = (m) => { store.mode = m; setModeState(m); };
+  const setMode = (m) => { store.mode = m; try { sessionStorage.setItem("wp", "1"); } catch {} setModeState(m); };
   const flash = (m, bad) => {
     const id = Math.random();
     setToasts((t) => [...t, { id, m, bad }]);
@@ -62,18 +62,18 @@ export default function Dashboard() {
         <span className="guild">{s.guild}</span>
         <span className="sp" />
         <span className={"live" + (live ? " on" : "")}><i />{live ? "Live" : "Reconnecting…"}</span>
-        <div className="seg" role="group" aria-label="Dashboard mode">
+        {mode && <div className="seg" role="group" aria-label="Dashboard mode">
           {[["auto", "Automatic", Bot], ["manual", "Manual", SlidersHorizontal]].map(([id, l, Icon]) => (
             <button key={id} className={mode === id ? "on" : ""} aria-pressed={mode === id} onClick={() => setMode(id)}>
               <Icon size={16} /><span>{l}</span>
             </button>
           ))}
-        </div>
+        </div>}
         <button className="icb" onClick={() => signOut()} aria-label="Sign out"><LogOut size={18} /></button>
       </header>
 
       <main className="wrap">
-        {mode === "manual" ? (
+        {!mode ? <Picker onPick={setMode} /> : mode === "manual" ? (
           <>
             <Stats s={s} />
             <div className="grid">
@@ -174,7 +174,7 @@ function Thresholds({ s, act }) {
 }
 
 function Chat({ s, onManual, onDenied, onDone }) {
-  const [msgs, setMsgs] = useState([{ r: "a", t: "Hi! I can turn panic mode on or off, change the threshold, save the layout, rebuild the server or release a snapshot hold. What do you need?" }]);
+  const [msgs, setMsgs] = useState([{ r: "a", t: "Hi! I can turn panic mode on or off, change the threshold, or save the layout. For a rebuild or releasing a snapshot hold, use Manual mode. What do you need?" }]);
   const [txt, setTxt] = useState(""), [wait, setWait] = useState(false);
   const hist = useRef([]), box = useRef();
   useEffect(() => { box.current && (box.current.scrollTop = box.current.scrollHeight); }, [msgs, wait]);
@@ -222,6 +222,27 @@ function Chat({ s, onManual, onDenied, onDone }) {
         <input value={txt} onChange={(e) => setTxt(e.target.value)} placeholder="Ask Worker to change something…" aria-label="Message" maxLength={1000} />
         <button className="btn pri" disabled={wait || !txt.trim()} aria-label="Send"><Send size={18} /></button>
       </form>
+    </section>
+  );
+}
+
+function Picker({ onPick }) {
+  const M = [
+    ["auto", "Automatic", Bot, "Tell the AI assistant what you need in plain language."],
+    ["manual", "Manual", SlidersHorizontal, "Switches, sliders and buttons that act instantly."],
+  ];
+  return (
+    <section className="pick">
+      <h1>How do you want to work?</h1>
+      <p className="lede">You can switch any time from the top-right corner.</p>
+      <div className="modes">
+        {M.map(([id, n, Icon, t]) => (
+          <button key={id} className="mode" onClick={() => onPick(id)}>
+            <span className="ic"><Icon size={22} /></span>
+            <span><b>{n}</b><small>{t}</small></span>
+          </button>
+        ))}
+      </div>
     </section>
   );
 }
