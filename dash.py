@@ -39,7 +39,7 @@ def setup(app,g):
         return x.bot.get_guild(int(gid))
 
     def gate(req,gid):
-        ip=(req.headers.get("x-forwarded-for") or "?").split(",")[0].strip()
+        ip=(req.headers.get("x-forwarded-for") or "?").split(",")[-1].strip()
         ks=((f"server:rl:ip:{ip}",10),(f"server:rl:gid:{gid}",30))
         if any(int(x.R.get(k) or 0)>=n for k,n in ks): raise HTTPException(429,"Too many attempts. Try again in 15 minutes.")
         return ks
@@ -61,7 +61,7 @@ def setup(app,g):
     @app.post("/api/auth/login")
     def login(d:Login,r:Request):
         gid=d.guild_id.strip(); gu=guild_of(gid); ks=gate(r,gid)
-        raw=x.R.get(f"server:account:{gid}"); a=json.loads(raw) if raw else None
+        raw=x.R.get(f"server:account:{gid}"); a=(raw if isinstance(raw,dict) else json.loads(raw)) if raw else None
         ok=hmac.compare_digest(kdf(d.password,base64.b64decode(a["s"]) if a else bytes(16)),base64.b64decode(a["h"]) if a else bytes(32))
         if not(a and ok): miss(ks); raise HTTPException(401,"Wrong Guild ID or password.")
         if not gu: raise HTTPException(404,"Worker is not in that server.")
@@ -74,7 +74,10 @@ def setup(app,g):
         code=d.code.strip().upper()[:16]
         gi,_,ui=(x.R.get(f"server:verify:{code}") or "").partition(":")
         m=gu.get_member(int(ui)) if gu and ui else None
-        if not(m and gi==gid and x.is_staff(m)) or x.R.delete(f"server:verify:{code}")!=1:
+        ok=bool(m and gi==gid and x.is_staff(m))
+        if ok and x.R.exists(f"server:account:{gid}") and m.id!=gu.owner_id:
+            miss(ks); raise HTTPException(403,"An account already exists for this server. Only the server owner can reset it.")
+        if not ok or x.R.delete(f"server:verify:{code}")!=1:
             miss(ks); raise HTTPException(403,DENIED)
         x.R.delete(f"server:verify:user:{gid}:{ui}")
         salt=secrets.token_bytes(16)
@@ -116,7 +119,7 @@ def setup(app,g):
     def state(gid):
         gu=x.bot.get_guild(gid)
         v=x.R.mget(x.K("panic_mode",gid),x.K("limit",gid),x.K("window",gid),x.S("events",gid),x.S("neutralized",gid),f"server:hold:{gid}")
-        return {"guild":gu.name if gu else str(gid),"panic":v[0]=="1","limit":int(v[1] or 3),"window":int(v[2] or 10),
+        return {"guild":gu.name if gu else str(gid),"panic":str(v[0])=="1","limit":int(v[1] or 3),"window":int(v[2] or 10),
                 "events":int(v[3] or 0),"neutralized":int(v[4] or 0),"hold":bool(v[5]),"log":x.R.lrange(f"server:log:{gid}",0,29)}
 
     @app.get("/api/dashboard/state")
@@ -147,7 +150,7 @@ def setup(app,g):
     def chat(c:Chat,gid:int=Depends(sess)):
         s=state(gid)
         p=("You are the admin assistant of Worker, a Discord security bot. Current state of this server: "+json.dumps({k:s[k] for k in("panic","limit","window","events","neutralized","hold")})
-           +'. Available actions: {"action":"panic","on":bool}, {"action":"limit","actions":int,"seconds":int}, {"action":"snapshot"}, {"action":"rebuild"}, {"action":"release"}. '
+           +'. Available actions: {"action":"panic","on":bool}, {"action":"limit","actions":int,"seconds":int}, {"action":"snapshot"}. Rebuild and release-hold are manual-only: if asked, tell the user to open Manual mode. '
            +'Reply ONLY with JSON: {"reply":"short friendly text","actions":[...]}. Use an empty actions list for questions. Never invent actions.\n'
            +"\n".join(f"{m.get('role')}: {str(m.get('content'))[:500]}" for m in c.history[-8:])+"\nuser: "+c.message[:1000])
         t=run(x.ai(p)) or "UNAVAILABLE"
@@ -156,6 +159,8 @@ def setup(app,g):
         except Exception: return {"reply":t,"results":[]}
         r=[]
         for a in j.get("actions",[])[:5]:
+            if not isinstance(a,dict) or a.get("action") in("rebuild","release"):
+                r.append("✗ Use Manual mode for that (it needs confirmation)"); continue
             try: r.append("✓ "+run(act(gid,a)))
             except Exception as e: r.append("✗ "+str(e)[:80])
         return {"reply":j.get("reply",""),"results":r}
