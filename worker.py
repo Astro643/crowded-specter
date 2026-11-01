@@ -21,7 +21,7 @@ MK={0:"create_text_channel",5:"create_text_channel",2:"create_voice_channel",13:
 # per-guild keys: config (panic_mode|limit|window) and stats (events|neutralized)
 def K(n,g): return f"server:config:{n}:{g}"
 def S(n,g): return f"server:stats:{n}:{g}"
-STAFF_PERMS=("administrator","manage_guild","manage_roles","manage_channels","manage_messages","kick_members","ban_members","moderate_members")
+STAFF_PERMS=("administrator","manage_guild")   # moderators (kick/ban/manage_messages...) are deliberately NOT staff
 def is_staff(m):
     p=m.guild_permissions
     return m.id==m.guild.owner_id or any(getattr(p,k) for k in STAFF_PERMS)
@@ -115,7 +115,7 @@ async def guard(g,act,tid):
     await AR.hincrby(s,act.name,1); await AR.expire(s,3600); await AR.sadd("server:sessions",s)
     await AR.incr(S("events",g.id))
     await note(g.id,f"{u} did {act.name.replace('_',' ')}")
-    if p=="1" or n>int(l or 3): await punish(g,u)
+    if str(p)=="1" or n>int(l or 3): await punish(g,u)
 
 # ---------- AI failover ----------
 async def ai(p):
