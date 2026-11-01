@@ -24,7 +24,7 @@ def setup(bot,g):
     async def status(i):
         g=i.guild.id
         p,l,w,ev,nu,h=await x.AR.mget(x.K("panic_mode",g),x.K("limit",g),x.K("window",g),x.S("events",g),x.S("neutralized",g),f"server:hold:{g}")
-        await i.response.send_message(f"panic={p=='1'} limit={l or 3}/{w or 10}s events={ev or 0} neutralized={nu or 0} snapshot_hold={bool(h)}",ephemeral=True)
+        await i.response.send_message(f"panic={str(p)=='1'} limit={l or 3}/{w or 10}s events={ev or 0} neutralized={nu or 0} snapshot_hold={bool(h)}",ephemeral=True)
 
     @cmd("Set anti-nuke threshold")
     async def limit(i,actions:ac.Range[int,1,50],seconds:ac.Range[int,1,300]):
@@ -60,11 +60,11 @@ def setup(bot,g):
     @T.command(name="verify-position",description="Get a code to create a dashboard account (staff only)")
     @ac.guild_only()
     async def verify_position(i):
-        if not x.is_staff(i.user): return await i.response.send_message("Access denied.",ephemeral=True)
+        if not x.is_staff(i.user): return await i.response.send_message("You cannot create an account. Only the server owner and administrators can.",ephemeral=True)
         uk=f"server:verify:user:{i.guild.id}:{i.user.id}"
         old=await x.AR.get(uk)
-        if old: await x.AR.delete(f"server:verify:{old}")
+        if old: await x.AR.delete(f"server:verify:{str(old)[1:]}")
         c=secrets.token_hex(4).upper()
         await x.AR.set(f"server:verify:{c}",f"{i.guild.id}:{i.user.id}",ex=600)
-        await x.AR.set(uk,c,ex=600)
+        await x.AR.set(uk,"k"+c,ex=600)
         await i.response.send_message(f"Code: `{c}` (valid 10 minutes, single use). Enter it with your Guild ID `{i.guild.id}` under Create account.",ephemeral=True)
